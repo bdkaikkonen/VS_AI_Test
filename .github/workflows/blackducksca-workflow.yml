@@ -37,6 +37,9 @@ jobs:
           ### SCANNING: Required fields
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          args: >
+            --detect.accuracy.required=LOW
+
           ### GITHUB TOKEN
           github_token: ${{ secrets.GITHUB_TOKEN }}  # Required when PR comments or sarif reports enabled
           blackducksca_prComment_enabled: true
