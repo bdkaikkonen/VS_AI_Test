@@ -1,37 +1,39 @@
-// Simple Node.js Hello World Web Server with Login
-const http = require('http');
-const url = require('url');
-const querystring = require('querystring');
+// Node.js Hello World Web Server with Express and JWT Authentication
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const expressJwt = require('express-jwt');
+const bodyParser = require('body-parser');
 
-const hostname = '127.0.0.1';
+const app = express();
 const port = 3000;
+const JWT_SECRET = 'your-secret-key-change-in-production';
 
-// Simple in-memory session storage (for demo purposes)
-const sessions = new Map();
+// Middleware
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+// Demo users
 const users = new Map([
-  ['admin', 'password'],
-  ['user', '123456'],
-  ['demo', 'demo']
+  ['admin', { password: 'password', id: 1, name: 'Administrator' }],
+  ['user', { password: '123456', id: 2, name: 'Regular User' }],
+  ['demo', { password: 'demo', id: 3, name: 'Demo User' }]
 ]);
 
-// Generate simple session ID
-function generateSessionId() {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
-// Check if user is logged in
-function isLoggedIn(req) {
-  const parsedUrl = url.parse(req.url, true);
-  const sessionId = parsedUrl.query.session;
-  return sessionId && sessions.has(sessionId);
-}
-
-// Get username from session
-function getUsername(req) {
-  const parsedUrl = url.parse(req.url, true);
-  const sessionId = parsedUrl.query.session;
-  return sessions.get(sessionId);
-}
+// JWT middleware for protected routes
+const jwtMiddleware = expressJwt({
+  secret: JWT_SECRET,
+  algorithms: ['HS256'],
+  getToken: function fromHeaderOrQuerystring(req) {
+    if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+      return req.headers.authorization.split(' ')[1];
+    } else if (req.query && req.query.token) {
+      return req.query.token;
+    } else if (req.cookies && req.cookies.token) {
+      return req.cookies.token;
+    }
+    return null;
+  }
+});
 
 // Common CSS styles
 const commonStyles = `
@@ -101,125 +103,32 @@ const commonStyles = `
   .nav {
     margin-bottom: 20px;
   }
+  .jwt-info {
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    font-size: 12px;
+    word-break: break-all;
+  }
 `;
 
-const server = http.createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/html');
-  
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
-  const query = parsedUrl.query;
-  
-  // Handle POST requests (for login form)
-  if (req.method === 'POST' && pathname === '/login') {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      const formData = querystring.parse(body);
-      const username = formData.username;
-      const password = formData.password;
-      
-      if (users.has(username) && users.get(username) === password) {
-        const sessionId = generateSessionId();
-        sessions.set(sessionId, username);
-        res.writeHead(302, { 'Location': `/?session=${sessionId}` });
-        res.end();
-      } else {
-        const loginHtml = getLoginPage('Invalid username or password');
-        res.end(loginHtml);
-      }
-    });
-    return;
-  }
-  
-  // Handle logout
-  if (pathname === '/logout') {
-    const sessionId = query.session;
-    if (sessionId) {
-      sessions.delete(sessionId);
-    }
-    res.writeHead(302, { 'Location': '/login' });
-    res.end();
-    return;
-  }
-  
-  // Check if user is logged in for protected routes
-  if (pathname === '/' || pathname === '/hello') {
-    if (!isLoggedIn(req)) {
-      res.writeHead(302, { 'Location': '/login' });
-      res.end();
-      return;
-    }
-    
-    const username = getUsername(req);
-    const name = query.name || username;
-    const sessionId = query.session;
-    
-    let greeting = `Hello, ${name}!`;
-    
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-          <title>Hello World - Node.js Server</title>
-          <style>${commonStyles}</style>
-      </head>
-      <body>
-          <div class="container">
-              <div class="nav">
-                  <p>Welcome, <strong>${username}</strong>!</p>
-                  <a href="/logout?session=${sessionId}">
-                      <button class="logout-btn">Logout</button>
-                  </a>
-              </div>
-              
-              <h1>Personalized Hello World</h1>
-              
-              <div class="greeting">${greeting}</div>
-              
-              <form method="GET" action="/">
-                  <input type="hidden" name="session" value="${sessionId}" />
-                  <div class="form-group">
-                      <input type="text" name="name" placeholder="Enter your name" value="${name}" />
-                      <button type="submit">Say Hello</button>
-                  </div>
-              </form>
-              
-              <p>Welcome to your Node.js web server!</p>
-              <p>Current time: ${new Date().toISOString()}</p>
-              <p>Server is running on port ${port}</p>
-          </div>
-      </body>
-      </html>
-    `;
-    
-    res.end(html);
-    return;
-  }
-  
-  // Default to login page
-  const loginHtml = getLoginPage();
-  res.end(loginHtml);
-});
-
+// Login page
 function getLoginPage(errorMessage = '') {
   return `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Login - Node.js Server</title>
+        <title>JWT Login - Node.js Server</title>
         <style>${commonStyles}</style>
     </head>
     <body>
         <div class="container">
-            <h1>Login</h1>
+            <h1>JWT Authentication Login</h1>
             
             ${errorMessage ? `<div class="error">${errorMessage}</div>` : ''}
             
-            <form method="POST" action="/login">
+            <form method="POST" action="/api/login">
                 <div class="form-group">
                     <input type="text" name="username" placeholder="Username" required />
                     <input type="password" name="password" placeholder="Password" required />
@@ -234,6 +143,10 @@ function getLoginPage(errorMessage = '') {
                 <p><strong>demo</strong> / demo</p>
             </div>
             
+            <div style="margin-top: 20px; font-size: 12px; color: #666;">
+                <p>Using express-jwt v0.1.3 for JWT authentication</p>
+            </div>
+            
             <p>Current time: ${new Date().toISOString()}</p>
         </div>
     </body>
@@ -241,11 +154,143 @@ function getLoginPage(errorMessage = '') {
   `;
 }
 
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
+// Main application page
+function getMainPage(user, name, token) {
+  const greeting = name ? `Hello, ${name}!` : `Hello, ${user.name}!`;
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>JWT Protected - Hello World</title>
+        <style>${commonStyles}</style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="nav">
+                <p>Welcome, <strong>${user.name}</strong> (ID: ${user.id})!</p>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+            
+            <h1>JWT Protected Hello World</h1>
+            
+            <div class="greeting">${greeting}</div>
+            
+            <form method="GET" action="/hello">
+                <input type="hidden" name="token" value="${token}" />
+                <div class="form-group">
+                    <input type="text" name="name" placeholder="Enter your name" value="${name || ''}" />
+                    <button type="submit">Say Hello</button>
+                </div>
+            </form>
+            
+            <div class="jwt-info">
+                <strong>JWT Token:</strong><br>
+                ${token}
+            </div>
+            
+            <p>Welcome to your JWT-protected Node.js web server!</p>
+            <p>Using express-jwt v0.1.3</p>
+            <p>Current time: ${new Date().toISOString()}</p>
+            <p>Server is running on port ${port}</p>
+        </div>
+        
+        <script>
+            function logout() {
+                window.location.href = '/logout';
+            }
+        </script>
+    </body>
+    </html>
+  `;
+}
+
+// Routes
+
+// Login page
+app.get('/login', (req, res) => {
+  res.send(getLoginPage());
+});
+
+// Login API
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.send(getLoginPage('Username and password are required'));
+  }
+  
+  const user = users.get(username);
+  if (!user || user.password !== password) {
+    return res.send(getLoginPage('Invalid username or password'));
+  }
+  
+  // Create JWT token
+  const token = jwt.sign(
+    { 
+      id: user.id, 
+      username: username,
+      name: user.name 
+    }, 
+    JWT_SECRET, 
+    { expiresIn: '1h' }
+  );
+  
+  // Redirect to main page with token
+  res.redirect(`/hello?token=${token}`);
+});
+
+// Protected main page
+app.get('/hello', jwtMiddleware, (req, res) => {
+  const name = req.query.name;
+  const token = req.query.token;
+  const user = req.user;
+  
+  res.send(getMainPage(user, name, token));
+});
+
+// Protected root route
+app.get('/', jwtMiddleware, (req, res) => {
+  const token = req.query.token;
+  const user = req.user;
+  
+  res.send(getMainPage(user, null, token));
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  res.redirect('/login');
+});
+
+// JWT info API endpoint
+app.get('/api/verify', jwtMiddleware, (req, res) => {
+  res.json({
+    message: 'JWT token is valid',
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Error handling for JWT
+app.use((err, req, res, next) => {
+  if (err.name === 'UnauthorizedError') {
+    res.redirect('/login');
+  } else {
+    next(err);
+  }
+});
+
+// Default route - redirect to login
+app.get('*', (req, res) => {
+  res.redirect('/login');
+});
+
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}/`);
   console.log('Press Ctrl+C to stop the server');
   console.log('\nDemo accounts:');
   console.log('- admin / password');
   console.log('- user / 123456');
   console.log('- demo / demo');
+  console.log('\nUsing express-jwt v0.1.3 for JWT authentication');
 });
